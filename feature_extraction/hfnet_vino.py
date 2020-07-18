@@ -14,10 +14,10 @@ default_config = {
     'model_path': 'models/hfnet_vino',
     'model_file': "hfnet.xml",
     'weights_file': "hfnet.bin",
-    'keypoint_number': 500,
+    'keypoint_number': 550,
     'keypoint_threshold': 0.002,
     'nms_iterations': 1,
-    'nms_radius': 1,
+    'nms_radius': 4,
 }
 
 class FeatureNet:
@@ -101,7 +101,7 @@ class FeatureNet:
                     self.config['keypoint_number'], self.config['keypoint_threshold'],
                     self.config['nms_iterations'], self.config['nms_radius'])
         # scaling back and x-y conversion
-        features['keypoints'] = np.array([[int(i[1] * scale[0]), int(i[0] * scale[1])] for i in keypoints])
+        features['keypoints'] = np.array([[int(i[1]), int(i[0])] for i in keypoints])
 
         local = np.transpose(res['pred/local_head/descriptor/Conv_1/BiasAdd/Normalize'],(0,2,3,1))
         if len(features['keypoints']) > 0:
@@ -113,6 +113,10 @@ class FeatureNet:
                         -1).numpy()
         else:
             features['local_descriptors'] = np.array([[]])
+
+        # scaling back and x-y conversion
+        features['keypoints'] = np.array([[int(i[1] * scale[0]), int(i[0] * scale[1])] for i in keypoints])
+        # features['keypoints'] = features['keypoints'] * np.array([scale[0], scale[1]])
 
         features['global_descriptor'] = res['pred/global_head/dimensionality_reduction/BiasAdd/Normalize']
 

@@ -12,7 +12,7 @@ default_config = {
     'keypoint_number': 500,
     'keypoint_threshold': 0.002,
     'nms_iterations': 1,
-    'nms_radius': 1,
+    'nms_radius': 4,
 }
 
 
