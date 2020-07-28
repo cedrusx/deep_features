@@ -3,8 +3,7 @@
 import tensorflow as tf
 import cv2
 import numpy as np
-from openvino.inference_engine import IENetwork
-from openvino.inference_engine import IEPlugin,IECore
+from openvino.inference_engine import IECore, IENetwork
 import os
 from tensorflow.python.ops import gen_nn_ops
 tf.enable_eager_execution()
@@ -14,9 +13,9 @@ default_config = {
     'model_path': 'models/hfnet_vino',
     'model_file': "hfnet.xml",
     'weights_file': "hfnet.bin",
-    'keypoint_number': 550,
+    'keypoint_number': 500,
     'keypoint_threshold': 0.002,
-    'nms_iterations': 1,
+    'nms_iterations': 0,
     'nms_radius': 4,
 }
 
@@ -75,13 +74,13 @@ class FeatureNet:
         scores, indices = tf.nn.top_k(scores, k)
         keypoints = tf.to_int32(tf.gather(
             tf.to_float(keypoints), indices))
-        return np.array(keypoints), np.array(scores)
+        return np.array(keypoints)[..., ::-1], np.array(scores)
 
     def select_keypoints_threshold(self, scores, keypoint_threshold, scale):
         keypoints = tf.where(tf.greater_equal(scores[0], self.config['keypoint_threshold'])).numpy()
         keypoints = np.array(keypoints)
         scores = np.array([scores[0, i[0], i[1]] for i in keypoints])
-        return keypoints, scores
+        return keypoints[..., ::-1], scores
 
     def infer(self, image):
         if len(image.shape) == 3:
@@ -92,7 +91,11 @@ class FeatureNet:
         res = self.exec_net.infer(inputs={self.input_blob: np.expand_dims(image_scaled, axis=0)})
 
         features = {}
-        scores = res['pred/local_head/detector/Squeeze']
+        # 1. Keypoints
+        scores = self.find_first_available(res, [
+            'pred/simple_nms/Select',
+            'pred/local_head/detector/Squeeze'])
+
         if self.config['keypoint_number'] == 0 and self.config['nms_iterations'] == 0:
             keypoints, features['scores'] = self.select_keypoints_threshold(scores,
                     self.config['keypoint_threshold'], scale)
@@ -100,24 +103,36 @@ class FeatureNet:
             keypoints, features['scores'] = self.select_keypoints(scores,
                     self.config['keypoint_number'], self.config['keypoint_threshold'],
                     self.config['nms_iterations'], self.config['nms_radius'])
-        # scaling back and x-y conversion
-        features['keypoints'] = np.array([[int(i[1]), int(i[0])] for i in keypoints])
+        # scaling back
+        features['keypoints'] = np.array([[int(i[0] * scale[0]), int(i[1] * scale[1])] for i in keypoints])
 
-        local = np.transpose(res['pred/local_head/descriptor/Conv_1/BiasAdd/Normalize'],(0,2,3,1))
+        # 2. Local descriptors
         if len(features['keypoints']) > 0:
+            local = self.find_first_available(res, [
+                'pred/local_head/descriptor/Conv_1/BiasAdd/Normalize',
+                'pred/local_head/descriptor/l2_normalize'])
+            local = np.transpose(local, (0,2,3,1))
             features['local_descriptors'] = \
                     tf.nn.l2_normalize(
                         tf.contrib.resampler.resampler(
                             local,
-                            tf.to_float(self.scaling_desc)[::-1]*tf.to_float(features['keypoints'][None])),
+                            tf.to_float(self.scaling_desc)[::-1]*tf.to_float(keypoints[None])),
                         -1).numpy()
         else:
             features['local_descriptors'] = np.array([[]])
 
-        # scaling back and x-y conversion
-        features['keypoints'] = np.array([[int(i[1] * scale[0]), int(i[0] * scale[1])] for i in keypoints])
-        # features['keypoints'] = features['keypoints'] * np.array([scale[0], scale[1]])
-
-        features['global_descriptor'] = res['pred/global_head/dimensionality_reduction/BiasAdd/Normalize']
+        # 3. Global descriptor
+        features['global_descriptor'] = self.find_first_available(res, [
+            'pred/global_head/l2_normalize_1',
+            'pred/global_head/dimensionality_reduction/BiasAdd/Normalize'])
 
         return features
+
+    @staticmethod
+    def find_first_available(dic, keys):
+        for key in keys:
+            if key in dic: return dic[key]
+        print('Could not find any of these keys:%s\nAvailable keys are:%s' % (
+                ''.join(['\n\t' + key for key in keys]),
+                ''.join(['\n\t' + key for key in dic.keys()])))
+        raise KeyError('Given keys are not available. See the log above.')

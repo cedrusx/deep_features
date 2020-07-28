@@ -12,7 +12,7 @@ default_config = {
     'keypoint_number': 500,
     'keypoint_threshold': 0.002,
     'nms_iterations': 1,
-    'nms_radius': 4,
+    'nms_radius': 1,
 }
 
 
@@ -37,11 +37,11 @@ class FeatureNet:
         self.scaling_op = ((tf.cast(tf.shape(self.net_local_desc)[1:3], tf.float32) - 1.)
             / (tf.cast(tf.shape(self.net_image_in)[1:3], tf.float32) - 1.))
         # bicubic interpolation (upsample X8 to the image size) and L2-normalization
-        self.local_descriptors_op = \
+        self.local_descriptors = \
             tf.nn.l2_normalize(
                 tf.contrib.resampler.resampler(
                     self.net_local_desc,
-                    self.scaling_op[::-1] * tf.to_float(self.keypoints)),
+                    self.scaling_op[::-1] * tf.to_float(self.keypoints)[None]),
                 -1)
 
 
@@ -85,7 +85,6 @@ class FeatureNet:
                 scores, indices = tf.nn.top_k(scores, k)
                 keypoints = tf.to_int32(tf.gather(
                     tf.to_float(keypoints), indices))
-            keypoints, scores = keypoints[None], scores[None]
             keypoints = keypoints[..., ::-1]  # x-y convention
             return keypoints, scores
 
@@ -96,17 +95,17 @@ class FeatureNet:
         else:
             image_in = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)[None,:,:,None]
         results = self.sess.run(
-                [self.scores,           # (1, num_keypoints) float32
-                self.net_logits,        # (1, 60, 80, 65) float32
-                self.net_local_desc,    # (1, 60, 80, 256) float32
-                self.net_global_decs,   # (1, 4096) float32
-                self.local_descriptors_op,# (1, num_keypoints, 256) float32
-                self.keypoints[0]],     # (num_keypoints, 2) int64
+                [
+                    self.keypoints,         # (num_keypoints, 2) int64
+                    self.scores,            # (num_keypoints,) float32
+                    self.local_descriptors, # (1, num_keypoints, 256) float32
+                    self.net_global_decs,   # (1, 4096) float32
+                ],
                 feed_dict = {self.net_image_in: image_in})
 
         features = {}
-        features['keypoints'] = results[-1]
-        features['scores'] = results[0][0]
-        features['local_descriptors'] = results[-2]
-        features['global_descriptor'] = results[-3]
+        features['keypoints'] = results[0]
+        features['scores'] = results[1]
+        features['local_descriptors'] = results[2]
+        features['global_descriptor'] = results[3]
         return features
