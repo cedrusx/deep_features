@@ -9,6 +9,7 @@ from cv_bridge import CvBridge
 from image_feature_msgs.msg import ImageFeatures, KeyPoint
 from std_msgs.msg import MultiArrayDimension
 import threading
+import queue
 
 def main():
     rospy.init_node('feature_extraction_node')
@@ -57,8 +58,11 @@ class Node():
         self.latest_msgs_lock = threading.Lock()
         self.stats = {}
         self.stats_lock = threading.Lock()
-        self.thread = threading.Thread(target=self.worker)
-        self.thread.start()
+        self.result_queue = queue.Queue()
+        self.worker_thread = threading.Thread(target=self.worker)
+        self.worker_thread.start()
+        self.publisher_thread = threading.Thread(target=self.publisher)
+        self.publisher_thread.start()
 
     def subscribe(self, topic):
         base_topic = '/'.join(topic.split('/')[:-1])
@@ -87,10 +91,38 @@ class Node():
                     self.latest_msgs[topic] = None
                 if msg is not None:
                     self.process(msg, topic)
-                    self.stats[topic]['processed'] += 1
+                    with self.stats_lock:
+                        self.stats[topic]['processed'] += 1
                     no_new_msg = False
                 self.print_stats(topic)
             if no_new_msg: time.sleep(0.01)
+
+    def publisher(self):
+        while not rospy.is_shutdown():
+            if self.result_queue.qsize() > 5:
+                rospy.logwarn_throttle(1, 'WOW! Inference is faster than publishing' +
+                    ' (%d unpublished result in the queue)\n' % self.result_queue.qsize() +
+                    'Please add more publisher threads!')
+            try:
+                res = self.result_queue.get(timeout=.5)
+            except queue.Empty:
+                continue
+            features = res['features']
+            topic = res['topic']
+            image = res['image']
+            header = res['header']
+            self.result_queue.task_done()
+            feature_msg = features_to_ros_msg(features, header)
+            self.feature_publishers[topic].publish(feature_msg)
+            if self.keypoint_publishers[topic].get_num_connections() > 0 or self.gui:
+                draw_keypoints(image, features['keypoints'], features['scores'])
+                if self.keypoint_publishers[topic].get_num_connections() > 0:
+                    keypoint_msg = self.cv_bridge.cv2_to_imgmsg(image, encoding='passthrough')
+                    keypoint_msg.header = header
+                    self.keypoint_publishers[topic].publish(keypoint_msg)
+                if self.gui:
+                    cv2.imshow(topic, image)
+                    cv2.waitKey(1)
 
     def print_stats(self, topic):
         now = rospy.Time.now()
@@ -110,33 +142,21 @@ class Node():
                 rospy.loginfo(topic + ': no message received')
 
     def process(self, msg, topic):
-        start_time = time.time()
         if msg.encoding == '8UC1' or msg.encoding == 'mono8':
-            image_gray = self.cv_bridge.imgmsg_to_cv2(msg)
-            if self.gui: image_color = cv2.cvtColor(image_gray, cv2.COLOR_GRAY2BGR)
+            image = self.cv_bridge.imgmsg_to_cv2(msg)
+            image_gray = image
         else:
-            image_color = self.cv_bridge.imgmsg_to_cv2(msg, 'bgr8')
-            image_gray = cv2.cvtColor(image_color, cv2.COLOR_BGR2GRAY)
-        t2 = time.time()
+            image = self.cv_bridge.imgmsg_to_cv2(msg, 'bgr8')
+            image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        start = time.time()
         features = self.net.infer(image_gray)
-        t3 = time.time()
-        if (features['keypoints'].shape[0] != 0):
-            feature_msg = features_to_ros_msg(features, msg)
-            self.feature_publishers[topic].publish(feature_msg)
-        end_time = time.time()
-        rospy.logdebug(topic + ': %.2f | %.2f ms (%d keypoints)' % (
-                (end_time-start_time) * 1000,
-                (t3 - t2) * 1000,
+        stop = time.time()
+        rospy.logdebug(topic + ': %.2f (%d keypoints)' % (
+                (stop - start) * 1000,
                 features['keypoints'].shape[0]))
-        if self.keypoint_publishers[topic].get_num_connections() > 0 or self.gui:
-            draw_keypoints(image_color, features['keypoints'], features['scores'])
-            if self.keypoint_publishers[topic].get_num_connections() > 0:
-                keypoint_msg = self.cv_bridge.cv2_to_imgmsg(image_color, encoding='passthrough')
-                keypoint_msg.header = msg.header
-                self.keypoint_publishers[topic].publish(keypoint_msg)
-            if self.gui:
-                cv2.imshow(topic, image_color)
-                cv2.waitKey(1)
+        if (features['keypoints'].shape[0] != 0):
+            res = {'features': features, 'header': msg.header, 'topic': topic, 'image': image}
+            self.result_queue.put(res)
 
 def draw_keypoints(image, keypoints, scores):
     upper_score = 0.5
@@ -147,9 +167,9 @@ def draw_keypoints(image, keypoints, scores):
         color = (255 * (1 - s), 255 * (1 - s), 255) # BGR
         cv2.circle(image, tuple(p), 3, color, 2)
 
-def features_to_ros_msg(features, img_msg):
+def features_to_ros_msg(features, header):
     msg = ImageFeatures()
-    msg.header = img_msg.header
+    msg.header = header
     msg.sorted_by_score.data = False
     for kp in features['keypoints']:
         p = KeyPoint()
