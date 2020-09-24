@@ -114,6 +114,11 @@ class Node():
             self.result_queue.task_done()
             feature_msg = features_to_ros_msg(features, header)
             self.feature_publishers[topic].publish(feature_msg)
+
+            # drawing keypoints is the most expensive operation in the publisher thread, and
+            # can be slow when the system workload is high. So we skip drawing the keypoints
+            # if there are many queued results to be published.
+            if self.result_queue.qsize() > 2: continue
             if self.keypoint_publishers[topic].get_num_connections() > 0 or self.gui:
                 draw_keypoints(image, features['keypoints'], features['scores'])
                 if self.keypoint_publishers[topic].get_num_connections() > 0:
