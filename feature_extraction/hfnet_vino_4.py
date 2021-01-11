@@ -87,13 +87,10 @@ class FeatureNet:
         self.input_blob = next(iter(self.net.inputs))
         self.out_blob = next(iter(self.net.outputs))
         self.net.batch_size = 1
-	
         self.cur_request_id = 0
-        self.next_request_id = 1
-		
-        # set device_name and number of requests =2 
-        self.exec_net = self.ie.load_network(network=self.net, num_requests=2, device_name="CPU")
-
+        self.next_request_id = 2
+       #set num_requests = 4, device _name GPU/cpu/MULTI:GPU,CPU
+        self.exec_net = self.ie.load_network(network=self.net, num_requests=4, device_name="CPU")
 
 
     def simple_nms(self, scores, iterations, radius):
@@ -144,19 +141,17 @@ class FeatureNet:
         scale = [image.shape[1] / self.input_size[0], image.shape[0] / self.input_size[1]]
         image_scaled = cv2.resize(image, self.input_size)[:,:,None]
         image_scaled = image_scaled.transpose((2, 0, 1))
-        
-        self.request_id = self.next_request_id
-        
-        #start infer asynchronous execution  
-  #1 sync
-        #res = self.exec_net.infer(inputs={self.input_blob: np.expand_dims(image_scaled, axis=0)})
-  #2 async 
+
+
+         #set 4 requests 开始推理的 start_async 函数
+        self.request_id = self.next_request_id       
 
         self.exec_net.start_async(request_id=self.request_id, inputs={self.input_blob: np.expand_dims(image_scaled, axis=0)})
-
+        
         self.exec_net.requests[self.cur_request_id].wait(-1)
 
         res = self.exec_net.requests[self.cur_request_id].outputs
+
 
         features = {}
         # 1. Keypoints
@@ -194,7 +189,13 @@ class FeatureNet:
             'pred/global_head/l2_normalize_1',
             'pred/global_head/dimensionality_reduction/BiasAdd/Normalize'])
         
-        self.cur_request_id, self.next_request_id = self.next_request_id, self.cur_request_id
+        #4 requests 并发：
+        self.cur_request_id = self.cur_request_id + 1
+        self.next_request_id = self.next_request_id + 1
+        if self.cur_request_id ==4:
+            self.cur_request_id = 0
+        if self.next_request_id==4:
+            self.next_request_id = 0
         return features
 
     @staticmethod
