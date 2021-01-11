@@ -89,7 +89,7 @@ class FeatureNet:
         self.net.batch_size = 1
         self.cur_request_id = 0
         self.next_request_id = 2
-       #set num_requests 推理数 ,device _name
+       #set num_requests = 4, device _name GPU/cpu/MULTI:GPU,CPU
         self.exec_net = self.ie.load_network(network=self.net, num_requests=4, device_name="CPU")
 
 
