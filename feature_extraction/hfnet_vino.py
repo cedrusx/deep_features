@@ -87,10 +87,11 @@ class FeatureNet:
         self.input_blob = next(iter(self.net.inputs))
         self.out_blob = next(iter(self.net.outputs))
         self.net.batch_size = 1
+	
         self.cur_request_id = 0
         self.next_request_id = 1
 		
-        # set device_name and number of requests
+        # set device_name and number of requests =2 
         self.exec_net = self.ie.load_network(network=self.net, num_requests=2, device_name="CPU")
 
 
