@@ -1,0 +1,9 @@
+name: deep_features
+channels:
+  - conda-forge
+dependencies:
+  - python=3.6
+  - tensorflow=1.14
+  - opencv
+  - pyyaml
+  - rospkg
