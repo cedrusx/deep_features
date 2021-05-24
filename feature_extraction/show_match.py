@@ -13,8 +13,12 @@ import argparse
 
 def main():
     parser = argparse.ArgumentParser(description='Test feature extraction and visualize keypoints')
-    parser.add_argument('--net', type=str, default='hfnet_vino',
-        help='Network model: hfnet_vino (default), hfnet_tf.')
+    parser.add_argument('--net', type=str, default='hfnet_tf',
+        help='Network model: hfnet_tf (default), hfnet_vino.')
+    parser.add_argument('-t', '--threshold', type=float, default=0,
+        help='Threshold of keypoint score.')
+    parser.add_argument('-n', '--number', type=int, default=0,
+        help='Maximum number of keypoints.')
     args,filenames = parser.parse_known_args()
 
     net_name = args.net
@@ -26,7 +30,10 @@ def main():
     else:
         exit('Unknown net %s' % net_name)
     config = default_config
-    #config['keypoint_threshold'] = 0.001
+    if args.threshold != 0:
+        config['keypoint_threshold'] = args.threshold
+    if args.number != 0:
+        config['keypoint_number'] = args.number
     net = FeatureNet(config)
     file_features = {}
     for f in filenames:

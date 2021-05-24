@@ -13,8 +13,12 @@ import argparse
 
 def main():
     parser = argparse.ArgumentParser(description='Test feature extraction and visualize keypoints')
-    parser.add_argument('--net', type=str, default='hfnet_vino',
-        help='Network model: hfnet_vino (default), hfnet_tf.')
+    parser.add_argument('--net', type=str, default='hfnet_tf',
+        help='Network model: hfnet_tf (default), hfnet_vino.')
+    parser.add_argument('-t', '--threshold', type=float, default=0,
+        help='Threshold of keypoint score.')
+    parser.add_argument('-n', '--number', type=int, default=0,
+        help='Maximum number of keypoints.')
     parser.add_argument('--pause', action='store_true',
         help='Wait for keyboard input after showing each image.')
     parser.add_argument('--no-gui', action='store_true',
@@ -28,7 +32,10 @@ def main():
     except ImportError as err:
         exit('Unknown net %s: %s' % (net_name, str(err)))
     config = default_config
-    #config['keypoint_threshold'] = 0
+    if args.threshold != 0:
+        config['keypoint_threshold'] = args.threshold
+    if args.number != 0:
+        config['keypoint_number'] = args.number
     net = FeatureNet(config)
     frame_count = 0
     total_time = 0.
