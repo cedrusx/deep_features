@@ -9,9 +9,15 @@ import numpy as np
 import time
 import threading
 import sys
+import argparse
 
 def main():
-    net_name = 'hfnet_vino'
+    parser = argparse.ArgumentParser(description='Test feature extraction and visualize keypoints')
+    parser.add_argument('--net', type=str, default='hfnet_vino',
+        help='Network model: hfnet_vino (default), hfnet_tf.')
+    args,filenames = parser.parse_known_args()
+
+    net_name = args.net
     gui = True
     if net_name == 'hfnet_vino':
         from hfnet_vino import FeatureNet, default_config
@@ -22,7 +28,6 @@ def main():
     config = default_config
     #config['keypoint_threshold'] = 0.001
     net = FeatureNet(config)
-    filenames = sys.argv[1:]
     file_features = {}
     for f in filenames:
         image = cv2.imread(f)

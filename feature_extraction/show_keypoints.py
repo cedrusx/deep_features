@@ -21,9 +21,9 @@ def main():
         help='Do not visualize keypoints.')
     args,filenames = parser.parse_known_args()
 
-    net_name = 'hfnet_vino'
+    net_name = args.net
     try:
-        cmd = 'from %s import FeatureNet, default_config' % (args.net)
+        cmd = 'from %s import FeatureNet, default_config' % (net_name)
         exec(cmd, globals())
     except ImportError as err:
         exit('Unknown net %s: %s' % (net_name, str(err)))
