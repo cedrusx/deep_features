@@ -55,8 +55,8 @@ def main():
         des2 = list(file_features[f2]['local_descriptors'])
         des1 = np.squeeze(file_features[f1]['local_descriptors'])
         des2 = np.squeeze(file_features[f2]['local_descriptors'])
-        kp1 = [cv2.KeyPoint(p[0], p[1], _size=2) for p in file_features[f1]['keypoints']]
-        kp2 = [cv2.KeyPoint(p[0], p[1], _size=2) for p in file_features[f2]['keypoints']]
+        kp1 = [cv2.KeyPoint(int(p[0]), int(p[1]), _size=2) for p in file_features[f1]['keypoints']]
+        kp2 = [cv2.KeyPoint(int(p[0]), int(p[1]), _size=2) for p in file_features[f2]['keypoints']]
         img1 = file_features[f1]['image']
         img2 = file_features[f2]['image']
 
