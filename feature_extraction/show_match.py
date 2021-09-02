@@ -2,6 +2,8 @@
 """
 A non-ROS script to visualize extracted keypoints and their matches of given image pairs
 """
+# Copyright (C) <2020-2021> Intel Corporation
+# SPDX-License-Identifier: MIT
 
 import os
 import cv2

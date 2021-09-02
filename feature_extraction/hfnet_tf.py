@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+# Copyright (C) <2020-2021> Intel Corporation
+# SPDX-License-Identifier: MIT
+
 import tensorflow as tf
 from tensorflow.python.ops import gen_nn_ops
 from tensorflow.python.saved_model import tag_constants

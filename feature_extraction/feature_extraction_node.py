@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# Copyright (C) <2020-2021> Intel Corporation
+# SPDX-License-Identifier: MIT
+
 import os
 import cv2
 import numpy as np
